@@ -1,5 +1,7 @@
 package wrapper;
 
+import COVchecker.COVScheduler;
+import COVchecker.JobIdentifier;
 import CustomException.BacNetConfigurationException;
 import com.serotonin.bacnet4j.type.Encodable;
 import com.serotonin.bacnet4j.type.enumerated.BinaryPV;
@@ -7,14 +9,17 @@ import com.serotonin.bacnet4j.type.enumerated.ObjectType;
 import com.serotonin.bacnet4j.type.primitive.Real;
 import com.serotonin.bacnet4j.type.primitive.UnsignedInteger;
 import enums.DeviceType;
+import listener.BacNetVariableListenerWrapper;
 import listener.IBacNetVariableListener;
 import org.code_house.bacnet4j.wrapper.api.BacNetObject;
 import org.code_house.bacnet4j.wrapper.api.BypassBacnetConverter;
 import org.code_house.bacnet4j.wrapper.api.Device;
 import org.code_house.bacnet4j.wrapper.ip.BacNetIpClient;
+import org.quartz.SchedulerException;
 import util.Constant;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,11 +31,10 @@ import java.util.Map;
  *     <li>Get and set values to those BacNetObjects</li>
  * </ul>
  */
-public class BacNetClientConfigurer extends BacNetIpClient implements AutoCloseable {
+public class BacNetClientConfigurer extends BacNetIpClient {
 
     private Map<Integer, Device> devices = new HashMap<>();
-    private IBacNetVariableListener iBacNetVariableListener = null;
-
+    private COVScheduler notifier = null;
 
     /**
      * @param broadcastId String value for BroadcastId of the BACnet gateway
@@ -42,6 +46,7 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
         super(broadcastId, portNo);
         this.start();
         setDevices(timeout);
+        this.notifier = new COVScheduler(this);
     }
 
     /**
@@ -53,34 +58,27 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
         super(broadcastId, portNo);
         this.start();
         setDevices(20000);
+        this.notifier = new COVScheduler(this);
     }
 
-    public void addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener iBacNetVariableListener) {
-        this.iBacNetVariableListener = iBacNetVariableListener;
+
+    public void addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener listener) throws BacNetConfigurationException, SchedulerException {
+
+        Map<String, List<BacNetVariableListenerWrapper>> listenerRegistry = COVScheduler.getListenerRegistry();
+        BacNetVariableListenerWrapper bacNetVariableListenerWrapper = new BacNetVariableListenerWrapper();
+        bacNetVariableListenerWrapper.setiBacNetVariableListener(listener);
+        bacNetVariableListenerWrapper.setOldValue(getBacNetObjectValue(unitObjectId, objectId));
+        JobIdentifier jobIdentifier=notifier.scheduleJob(unitObjectId, objectId, bacNetVariableListenerWrapper);
+//
+//        if (listenerRegistry.containsKey(unitObjectId + "-" + objectId)) {
+//            listenerRegistry.get(unitObjectId + "-" + objectId).add(bacNetVariableListenerWrapper);
+//        } else {
+//            List<BacNetVariableListenerWrapper> listenerList = new ArrayList<>();
+//            listenerList.add(bacNetVariableListenerWrapper);
+//            listenerRegistry.put(unitObjectId + "-" + objectId, listenerList);
+//        }
     }
 
-    public void notifyOnValueChange(int unitObjectId, int objectId, Object newValue) throws BacNetConfigurationException {
-        if (this.iBacNetVariableListener != null) {
-            if(BacNetObjectWrapper.getCurrentValue()==null)
-            {
-                BacNetObjectWrapper.setCurrentValue(newValue);
-            }
-            Object oldValue=BacNetObjectWrapper.getCurrentValue();
-            this.iBacNetVariableListener.onVariableChange(unitObjectId, objectId,oldValue ,newValue);
-            BacNetObjectWrapper.setCurrentValue(newValue);
-        }
-    }
-
-    public void addListener(int unitObjectId, int objectId) {
-        this.addValueChangeListener(unitObjectId, objectId, new IBacNetVariableListener() {
-            @Override
-            public void onVariableChange(int unitObjectId, int objectId,Object oldValue ,Object newValue) {
-                if (!newValue.equals(oldValue)) {
-                    System.out.println("value is different");
-                }
-            }
-        });
-    }
 
     /**
      * @param timeout-given number is timeout in millis
@@ -206,8 +204,8 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
         }
     }
 
-    @Override
-    public void close() throws Exception {
-        this.stop();
-    }
+//    @Override
+//    public void close() throws Exception {
+//        this.stop();
+//    }
 }
