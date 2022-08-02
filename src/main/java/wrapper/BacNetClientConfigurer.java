@@ -19,7 +19,6 @@ import org.quartz.SchedulerException;
 import util.Constant;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,23 +30,11 @@ import java.util.Map;
  *     <li>Get and set values to those BacNetObjects</li>
  * </ul>
  */
-public class BacNetClientConfigurer extends BacNetIpClient {
+public class BacNetClientConfigurer extends BacNetIpClient implements AutoCloseable {
 
     private Map<Integer, Device> devices = new HashMap<>();
     private COVScheduler notifier = null;
 
-    /**
-     * @param broadcastId String value for BroadcastId of the BACnet gateway
-     * @param portNo      Integer Value for Port no of the BACnet Gateway
-     * @param timeout     given number is timeout in millis
-     * @implNote Constructor to configure the BacNetClient with required credentials
-     */
-    public BacNetClientConfigurer(String broadcastId, int portNo, long timeout) {
-        super(broadcastId, portNo);
-        this.start();
-        setDevices(timeout);
-        this.notifier = new COVScheduler(this);
-    }
 
     /**
      * @param broadcastId String value for BroadcastId of the BACnet gateway
@@ -61,24 +48,47 @@ public class BacNetClientConfigurer extends BacNetIpClient {
         this.notifier = new COVScheduler(this);
     }
 
+    /**
+     * @param broadcastId String value for BroadcastId of the BACnet gateway
+     * @param portNo      Integer Value for Port no of the BACnet Gateway
+     * @param timeout given number is timeout in millis
+     * @implNote Constructor to configure the BacNetClient with required credentials
+     */
+    public BacNetClientConfigurer(String broadcastId, int portNo, long timeout) {
+        super(broadcastId, portNo);
+        this.start();
+        setDevices(timeout);
+        this.notifier = new COVScheduler(this);
+    }
 
-    public void addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener listener) throws BacNetConfigurationException, SchedulerException {
+    public COVScheduler getNotifier() {
+        return notifier;
+    }
 
-        Map<String, List<BacNetVariableListenerWrapper>> listenerRegistry = COVScheduler.getListenerRegistry();
+
+    /**
+     * @param unitObjectId Object ID of the device
+     * @param objectId     BacNetObject ID for a particular device
+     * @param listener     IBacNetVariableListener object
+     * @return IBacNetVariableListener
+     * @throws BacNetConfigurationException
+     * @throws SchedulerException
+     */
+    public IBacNetVariableListener addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener listener) throws BacNetConfigurationException, SchedulerException {
+
         BacNetVariableListenerWrapper bacNetVariableListenerWrapper = new BacNetVariableListenerWrapper();
         bacNetVariableListenerWrapper.setiBacNetVariableListener(listener);
         bacNetVariableListenerWrapper.setOldValue(getBacNetObjectValue(unitObjectId, objectId));
-        JobIdentifier jobIdentifier=notifier.scheduleJob(unitObjectId, objectId, bacNetVariableListenerWrapper);
-//
-//        if (listenerRegistry.containsKey(unitObjectId + "-" + objectId)) {
-//            listenerRegistry.get(unitObjectId + "-" + objectId).add(bacNetVariableListenerWrapper);
-//        } else {
-//            List<BacNetVariableListenerWrapper> listenerList = new ArrayList<>();
-//            listenerList.add(bacNetVariableListenerWrapper);
-//            listenerRegistry.put(unitObjectId + "-" + objectId, listenerList);
-//        }
+        JobIdentifier jobIdentifier = notifier.scheduleJob(unitObjectId, objectId, bacNetVariableListenerWrapper);
+        notifier.addListenerToListenerRegistry(jobIdentifier, bacNetVariableListenerWrapper);
+        return listener;
     }
 
+    public void stopValueChangeListener(IBacNetVariableListener iBacNetVariableListener) throws SchedulerException {
+        JobIdentifier jobIdentifier = notifier.getListenerJobIdentifier(iBacNetVariableListener);
+        boolean status = notifier.stopJob(jobIdentifier);
+        System.out.println(status);
+    }
 
     /**
      * @param timeout-given number is timeout in millis
@@ -204,8 +214,8 @@ public class BacNetClientConfigurer extends BacNetIpClient {
         }
     }
 
-//    @Override
-//    public void close() throws Exception {
-//        this.stop();
-//    }
+    @Override
+    public void close() throws Exception {
+        this.stop();
+    }
 }

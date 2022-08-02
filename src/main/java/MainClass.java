@@ -1,7 +1,13 @@
 import CustomException.BacNetConfigurationException;
+import com.serotonin.bacnet4j.type.enumerated.BinaryPV;
+import com.serotonin.bacnet4j.type.primitive.Real;
+import com.serotonin.bacnet4j.type.primitive.UnsignedInteger;
+import listener.IBacNetVariableListener;
 import org.quartz.SchedulerException;
 import wrapper.BacNetClientConfigurer;
 import wrapper.BacNetObjectWrapper;
+
+import java.util.Scanner;
 
 
 public class MainClass {
@@ -23,8 +29,12 @@ public class MainClass {
             System.out.println("Property Value After " + propertyValue2.toString());
 
             client.addValueChangeListener(unitObjectId, 1, new ThirdPartyCl());
-            client.addValueChangeListener(unitObjectId, 2, new ThirdPartyCl());
+            IBacNetVariableListener listener= client.addValueChangeListener(unitObjectId, 2, new ThirdPartyCl());
             client.addValueChangeListener(unitObjectId, 9, new ThirdPartyCl());
+
+            Thread.sleep(Long.parseLong("15000"));
+            System.out.println("after sleep");
+            client.stopValueChangeListener(listener);
 
         } catch (BacNetConfigurationException ex) {
             ex.printStackTrace();

@@ -20,4 +20,9 @@ public class JobIdentifier {
     public void setGroupId(String groupId) {
         this.groupId = groupId;
     }
+
+    @Override
+    public String toString() {
+        return name + "-" + groupId;
+    }
 }
