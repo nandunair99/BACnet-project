@@ -1,4 +1,4 @@
-package COVchecker;
+package covchecker;
 
 public class JobIdentifier {
 

@@ -1,13 +1,14 @@
 package wrapper;
 
-import COVchecker.COVScheduler;
-import COVchecker.JobIdentifier;
-import CustomException.BacNetConfigurationException;
+import bacnetexception.BacNetConfigurationException;
 import com.serotonin.bacnet4j.type.Encodable;
 import com.serotonin.bacnet4j.type.enumerated.BinaryPV;
 import com.serotonin.bacnet4j.type.enumerated.ObjectType;
 import com.serotonin.bacnet4j.type.primitive.Real;
 import com.serotonin.bacnet4j.type.primitive.UnsignedInteger;
+import covchecker.COVScheduler;
+import covchecker.JobIdentifier;
+import covchecker.schedulerexception.COVSchedulerException;
 import enums.DeviceType;
 import listener.BacNetVariableListenerWrapper;
 import listener.IBacNetVariableListener;
@@ -39,9 +40,11 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
     /**
      * @param broadcastId String value for BroadcastId of the BACnet gateway
      * @param portNo      Integer Value for Port no of the BACnet Gateway
+     * @throws BacNetConfigurationException
+     * @throws SchedulerException
      * @implNote Constructor to configure the BacNetClient with required credentials
      */
-    public BacNetClientConfigurer(String broadcastId, int portNo) {
+    public BacNetClientConfigurer(String broadcastId, int portNo) throws BacNetConfigurationException {
         super(broadcastId, portNo);
         this.start();
         setDevices(20000);
@@ -51,10 +54,12 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
     /**
      * @param broadcastId String value for BroadcastId of the BACnet gateway
      * @param portNo      Integer Value for Port no of the BACnet Gateway
-     * @param timeout given number is timeout in millis
+     * @param timeout     given number is timeout in millis
+     * @throws BacNetConfigurationException
+     * @throws SchedulerException
      * @implNote Constructor to configure the BacNetClient with required credentials
      */
-    public BacNetClientConfigurer(String broadcastId, int portNo, long timeout) {
+    public BacNetClientConfigurer(String broadcastId, int portNo, long timeout) throws BacNetConfigurationException {
         super(broadcastId, portNo);
         this.start();
         setDevices(timeout);
@@ -72,50 +77,77 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
      * @param listener     IBacNetVariableListener object
      * @return IBacNetVariableListener
      * @throws BacNetConfigurationException
-     * @throws SchedulerException
+     * @throws COVSchedulerException
+     * @implNote Adds a Change of Value listener for the specified BacNetObject of the specified Device
      */
-    public IBacNetVariableListener addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener listener) throws BacNetConfigurationException, SchedulerException {
+    public IBacNetVariableListener addValueChangeListener(int unitObjectId, int objectId, IBacNetVariableListener listener) throws BacNetConfigurationException, COVSchedulerException {
 
-        BacNetVariableListenerWrapper bacNetVariableListenerWrapper = new BacNetVariableListenerWrapper();
-        bacNetVariableListenerWrapper.setiBacNetVariableListener(listener);
-        bacNetVariableListenerWrapper.setOldValue(getBacNetObjectValue(unitObjectId, objectId));
-        JobIdentifier jobIdentifier = notifier.scheduleJob(unitObjectId, objectId, bacNetVariableListenerWrapper);
-        notifier.addListenerToListenerRegistry(jobIdentifier, bacNetVariableListenerWrapper);
-        return listener;
+        try {
+            BacNetVariableListenerWrapper bacNetVariableListenerWrapper = new BacNetVariableListenerWrapper();
+            bacNetVariableListenerWrapper.setiBacNetVariableListener(listener);
+            bacNetVariableListenerWrapper.setOldValue(getBacNetObjectValue(unitObjectId, objectId));
+            JobIdentifier jobIdentifier = notifier.scheduleJob(unitObjectId, objectId, bacNetVariableListenerWrapper);
+            notifier.addListenerToListenerRegistry(jobIdentifier, bacNetVariableListenerWrapper);
+            return listener;
+        } catch (COVSchedulerException e) {
+            throw new COVSchedulerException(e);
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
+        }
     }
 
-    public void stopValueChangeListener(IBacNetVariableListener iBacNetVariableListener) throws SchedulerException {
-        JobIdentifier jobIdentifier = notifier.getListenerJobIdentifier(iBacNetVariableListener);
-        boolean status = notifier.stopJob(jobIdentifier);
-        System.out.println(status);
+    /**
+     * @param iBacNetVariableListener
+     * @throws COVSchedulerException
+     * @throws BacNetConfigurationException
+     * @implNote Stops the listener from listening for change of value for the specified BacNetObject of the specified Device
+     */
+    public boolean stopValueChangeListener(IBacNetVariableListener iBacNetVariableListener) throws COVSchedulerException, BacNetConfigurationException {
+        try {
+            JobIdentifier jobIdentifier = notifier.getListenerJobIdentifier(iBacNetVariableListener);
+            return notifier.stopJob(jobIdentifier);
+        } catch (COVSchedulerException e) {
+            throw new COVSchedulerException(e);
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
+        }
     }
 
     /**
      * @param timeout-given number is timeout in millis
+     * @throws BacNetConfigurationException
      * @implNote Collects all the detected Indoor unit devices during the timeout into a Map<Integer,Device>
      */
-    private void setDevices(long timeout) {
-        for (Device device : this.discoverDevices(timeout)) {
-            if (device.getName().equalsIgnoreCase(DeviceType.INDOOR_UNIT.getType())) {
-                devices.put(device.getInstanceNumber(), device);
+    private void setDevices(long timeout) throws BacNetConfigurationException {
+        try {
+            for (Device device : this.discoverDevices(timeout)) {
+                if (device.getName().equalsIgnoreCase(DeviceType.INDOOR_UNIT.getType())) {
+                    devices.put(device.getInstanceNumber(), device);
+                }
             }
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
         }
     }
 
     /**
      * @param device Indoor Units whose BacNetObjects are to be accessed
      * @return Map<Integer, BacNetObjectWrapper>
+     * @throws BacNetConfigurationException This will exclude the BacNetObjects with ObjectType=device and considers the rest
      * @implNote Collects all BacNetObjects of the particular device into a Map<Integer,BacNetObjectWrapper>
-     * This will exclude the BacNetObjects with ObjectType=device and considers the rest
      */
-    private Map<Integer, BacNetObjectWrapper> getUnitObjects(Device device) {
-        Map<Integer, BacNetObjectWrapper> bacNetObjectWrapperMap = new HashMap<>();
-        for (BacNetObject object : this.getDeviceObjects(device)) {
-            if (!object.getType().getBacNetType().equals(ObjectType.device)) {
-                bacNetObjectWrapperMap.put(object.getId(), new BacNetObjectWrapper(object));
+    private Map<Integer, BacNetObjectWrapper> getUnitObjects(Device device) throws BacNetConfigurationException {
+        try {
+            Map<Integer, BacNetObjectWrapper> bacNetObjectWrapperMap = new HashMap<>();
+            for (BacNetObject object : this.getDeviceObjects(device)) {
+                if (!object.getType().getBacNetType().equals(ObjectType.device)) {
+                    bacNetObjectWrapperMap.put(object.getId(), new BacNetObjectWrapper(object));
+                }
             }
+            return bacNetObjectWrapperMap;
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
         }
-        return bacNetObjectWrapperMap;
     }
 
     /**
@@ -126,13 +158,18 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
      * @implNote Returns the caller with an Object of BacNetObjectWrapper with matching objectId, if exists
      */
     public BacNetObjectWrapper readBacNetObject(int unitObjectId, int objectId) throws BacNetConfigurationException {
-        Device device = discoverDevice(unitObjectId);
-        Map<Integer, BacNetObjectWrapper> map = this.getUnitObjects(device);
-        if (map.keySet().contains(objectId)) {
-            return map.get(objectId);
-        } else {
-            throw new BacNetConfigurationException(Constant.DEVICE_OBJECT_NOT_FOUND);
+        try {
+            Device device = discoverDevice(unitObjectId);
+            Map<Integer, BacNetObjectWrapper> map = this.getUnitObjects(device);
+            if (map.keySet().contains(objectId)) {
+                return map.get(objectId);
+            } else {
+                throw new BacNetConfigurationException(Constant.DEVICE_OBJECT_NOT_FOUND);
+            }
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
         }
+
     }
 
     /**
@@ -143,12 +180,16 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
      * @implNote Returns the value for a particular BacNetObject with matching objectId, if exists
      */
     public Encodable getBacNetObjectValue(int unitObjectId, int objectId) throws BacNetConfigurationException {
-        Device device = discoverDevice(unitObjectId);
-        Map<Integer, BacNetObjectWrapper> map = this.getUnitObjects(device);
-        if (map.keySet().contains(objectId)) {
-            return this.getPresentValue(map.get(objectId), new BypassBacnetConverter());
-        } else {
-            throw new BacNetConfigurationException(Constant.DEVICE_OBJECT_NOT_FOUND);
+        try {
+            Device device = discoverDevice(unitObjectId);
+            Map<Integer, BacNetObjectWrapper> map = this.getUnitObjects(device);
+            if (map.keySet().contains(objectId)) {
+                return this.getPresentValue(map.get(objectId), new BypassBacnetConverter());
+            } else {
+                throw new BacNetConfigurationException(Constant.DEVICE_OBJECT_NOT_FOUND);
+            }
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
         }
     }
 
@@ -214,8 +255,17 @@ public class BacNetClientConfigurer extends BacNetIpClient implements AutoClosea
         }
     }
 
+    /**
+     * @throws BacNetConfigurationException
+     * @implNote Shuts down the scheduler after all the currently executing jobs are complete, and then closes the BacNetClient resource
+     */
     @Override
-    public void close() throws Exception {
-        this.stop();
+    public void close() throws BacNetConfigurationException {
+        try {
+            this.notifier.getScheduler().shutdown(true);
+            this.stop();
+        } catch (Exception e) {
+            throw new BacNetConfigurationException(e);
+        }
     }
 }

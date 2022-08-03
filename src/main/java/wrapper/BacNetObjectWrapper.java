@@ -1,6 +1,5 @@
 package wrapper;
 
-import listener.IBacNetVariableListener;
 import org.code_house.bacnet4j.wrapper.api.BacNetObject;
 
 /**
@@ -12,27 +11,18 @@ public class BacNetObjectWrapper extends BacNetObject {
      * @param bacNetObject BacNetObject of a device
      * @implNote Constructor for BacNetObject Wrapper
      */
-    private IBacNetVariableListener iBacNetVariableListener = null;
-    private Object currentValue;
 
     public BacNetObjectWrapper(BacNetObject bacNetObject) {
         super(bacNetObject.getDevice(), bacNetObject.getId(), bacNetObject.getType(), bacNetObject.getName(), bacNetObject.getDescription(), bacNetObject.getUnits());
     }
 
-    public Object getCurrentValue() {
-        return currentValue;
+    @Override
+    public boolean equals(Object o) {
+        return super.equals(o);
     }
 
-    public void setCurrentValue(Object currentValue) {
-        this.currentValue = currentValue;
+    @Override
+    public int hashCode() {
+        return super.hashCode();
     }
-
-    public IBacNetVariableListener getiBacNetVariableListener() {
-        return iBacNetVariableListener;
-    }
-
-    public void setiBacNetVariableListener(IBacNetVariableListener iBacNetVariableListener) {
-        this.iBacNetVariableListener = iBacNetVariableListener;
-    }
-
 }

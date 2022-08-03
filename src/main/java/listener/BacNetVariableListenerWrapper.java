@@ -3,7 +3,6 @@ package listener;
 public class BacNetVariableListenerWrapper {
     private IBacNetVariableListener iBacNetVariableListener;
     private Object oldValue;
-    private Object newValue;
 
     public IBacNetVariableListener getiBacNetVariableListener() {
         return iBacNetVariableListener;
@@ -21,11 +20,4 @@ public class BacNetVariableListenerWrapper {
         this.oldValue = oldValue;
     }
 
-    public Object getNewValue() {
-        return newValue;
-    }
-
-    public void setNewValue(Object newValue) {
-        this.newValue = newValue;
-    }
 }
